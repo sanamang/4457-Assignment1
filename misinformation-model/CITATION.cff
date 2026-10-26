@@ -1,0 +1,23 @@
+abstract: An agent-based framework to simulate the diffusion process of a piece of
+  misinformation according to the SBFC model in which the fake news and its debunking
+  compete in a social network. Considering new classes of agents, this model is closer
+  to reality and proposed different strategies how to mitigate and control misinformation.
+authors:
+- email: yalabadi@ucf.edu
+  family-names: Khodabandeh Yalabadi
+  given-names: Ali
+cff-version: 1.2.0
+date-released: '2023-10-05'
+identifiers:
+- type: url
+  value: https://www.comses.net/codebases/48df051c-1f3a-4a27-94d0-bf2253947816/releases/1.0.0/
+keywords:
+- agent based modeling and simulation
+- Agent-Based Modelling - Software engineering - Information Systems and Social Networks
+license: MIT
+message: If you use this software, please cite it using the metadata from this file.
+title: Controlling the misinformation diffusion in social media by the effect of different
+  classes of agents
+type: software
+url: https://www.comses.net/codebases/48df051c-1f3a-4a27-94d0-bf2253947816/releases/1.0.0/
+version: 1.0.0
