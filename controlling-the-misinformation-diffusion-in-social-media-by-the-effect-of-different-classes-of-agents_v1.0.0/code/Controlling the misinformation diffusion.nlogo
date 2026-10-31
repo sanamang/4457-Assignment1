@@ -1,10 +1,12 @@
 extensions [ nw ]
 
-turtles-own [ node-id xcord ycord degree community state class ] ;; Three states of agents: "B" (believer) ;  "F" (factChecker) ; "S" (susceptible)
+turtles-own [ node-id xcord ycord degree community state class fear anxiety skepticism cost-of-verifying ] ;; Three states of agents: "B" (believer) ;  "F" (factChecker) ; "S" (susceptible)
                             ;;, Five classes: "Sc" (Scholar), "I" (influencer), "N" (Normal), "BBot" (Believer bots), "FBot" (Fact checker bots)
+                            ;;, Emotion/personality (extension): fear = emotional state (e), anxiety/skepticism = personality traits (a, s)
+                            ;;, cost-of-verifying = c = c0 + anxiety * fear - skepticism
 
 links-own [ weigth ]  ;; the weight of the links between agents
-globals [ number-of-agents total-ticks time-effect n-effect i-s-sc i-b-sc i-f-sc i-s-in i-b-in i-f-in i-s-n i-b-n i-f-n i-b-b i-f-b]
+globals [ number-of-agents total-ticks time-effect n-effect i-s-sc i-b-sc i-f-sc i-s-in i-b-in i-f-in i-s-n i-b-n i-f-n i-b-b i-f-b alarm-is-false? ]
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;   SETUP   ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
@@ -15,6 +17,7 @@ to setup
   nw:set-context turtles links
   nw:load-gml "facebook.gml" turtles links
   setup-turtles
+  set alarm-is-false? random-float 1 < f   ;; ground truth of this run's alarm, drawn from the doc's f parameter; agents never observe it directly
   update-plot
   update-output
   reset-ticks
@@ -31,6 +34,9 @@ to go
   ifelse night-time-effect? [
     ifelse 3 <= remainder (ticks / 6) 4 [set n-effect 0][set n-effect 1]
   ][set n-effect 1]
+
+  spread-fear             ;; emotion/personality extension: fear rises with exposed sharers, decays otherwise
+  update-cost             ;; recompute cost-of-verifying = c0 + anxiety * fear - skepticism
 
   spreading               ;
   forgetting              ;-- Three main procedures for agent's behavior
@@ -51,6 +57,10 @@ to setup-turtles
     setxy xcord ycord
     set size 3
     set color violet
+    set anxiety random-float 1
+    set skepticism random-float 1
+    set fear 0
+    set cost-of-verifying c0
   ]
 
   if scholars-community != "None" [
@@ -165,57 +175,33 @@ end
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;  GO PROCEDURES ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
-to spreading  ;; each agent modifies with some probability its state considering the points of view (states) of its neighbors;
-  ; S -> B and S -> F according to:
-  ; S -> B : "spreading" function for the hoax (fi)
-  ; S -> F : disseminate among the immediate neighborhood of a vertex (gi)
+to spread-fear  ;; emotion/personality extension: fear (e) rises with exposure to neighbors who are currently sharing (B), decays otherwise
+  ask turtles [
+    let n-neighbors count link-neighbors
+    let nB count link-neighbors with [state = "B"]
+    ifelse nB > 0
+      [ set fear min list 1 (fear + fear-contagion-rate * (nB / n-neighbors)) ]
+      [ set fear max list 0 (fear - fear-decay-rate) ]
+  ]
+end
+
+to update-cost  ;; c = c0 + a * e - s, per the formal model's Emotion and Personality section
+  ask turtles [ set cost-of-verifying max list 0 (c0 + anxiety * fear - skepticism) ]
+end
+
+to spreading  ;; S -> B (share now) or S -> F (verify first)
+  ; exposure to the alarm still spreads socially through the network (neighbor contact),
+  ; but once exposed, the agent's choice follows the game's decision rule: share now when
+  ; cost-of-verifying > q * f * r, otherwise verify first (see "NetLogo Model" section of the proposal)
   ask turtles with [state = "S"][
-    let nB_scholar count link-neighbors with [state = "B" and class = "Sc"]
-    let nB_influencer count link-neighbors with [state = "B" and class = "I"]
-    let nB_normal count link-neighbors with [state = "B" and class = "N"]
-    let nB_bot count link-neighbors with [state = "B" and class = "BBot"]
-
-    let nF_scholar count link-neighbors with [state = "F" and class = "Sc"]
-    let nF_influencer count link-neighbors with [state = "F" and class = "I"]
-    let nF_normal count link-neighbors with [state = "F" and class = "N"]
-    let nF_bot count link-neighbors with [state = "F" and class = "FBot"]
-
-    let nB 0
-    let nF 0
-
-    if class = "Sc" [
-      set nB (nB_scholar) + nB_influencer + nB_normal + nB_bot
-      set nF (nF_scholar) + nF_influencer + nF_normal + nF_bot
-    ]
-    if class = "I" [
-      set nB nB_scholar + nB_influencer + nB_normal + nB_bot
-      set nF nF_scholar + nF_influencer + nF_normal + nF_bot
-    ]
-    if class = "N" [
-      set nB nB_scholar + nB_influencer + nB_normal + nB_bot
-      set nF nF_scholar + nF_influencer + nF_normal + nF_bot
-    ]
-
-    let _1PlusA ( 1 + alpha-hoaxCredibility)
-    let _1MinusA ( 1 - alpha-hoaxCredibility)
-    let den (nB * _1PlusA + nF * _1MinusA)
-    let f 0
-    let g 0
-    if den != 0 [
-      set f n-effect * time-effect * beta-spreadingRate * ( nB * _1PlusA / den )
-      set g n-effect * time-effect * beta-spreadingRate * ( nF * _1MinusA / den )
-    ]
-
-    let random-val-f random-float 1
-
-    ifelse f > g [
-      ifelse random-val-f < f
-      [ set state "B" ]
-      [ if random-val-f < (f + g) [ set state "F" ]]
-    ][
-      ifelse random-val-f < g
-      [ set state "F" ]
-      [ if random-val-f < (f + g) [ set state "B" ]]
+    let n-exposed count link-neighbors with [state = "B" or state = "F"]
+    if n-exposed > 0 [
+      let exposure-chance n-effect * time-effect * beta-spreadingRate
+      if random-float 1 < exposure-chance [
+        ifelse cost-of-verifying > q * f * r
+          [ set state "B" ]
+          [ set state "F" ]
+      ]
     ]
   ]
 end
@@ -810,6 +796,139 @@ MONITOR
 % Scholars
 count turtles with [class = \"Sc\"] / number-of-agents * 100
 2
+1
+11
+
+TEXTBOX
+10
+788
+400
+806
+Emotion & Fact-Checking (Extension)
+14
+0.0
+1
+
+SLIDER
+10
+810
+210
+843
+q
+q
+0
+1
+0.5
+0.1
+1
+NIL
+HORIZONTAL
+
+SLIDER
+230
+810
+430
+843
+f
+f
+0
+1
+0.3
+0.05
+1
+NIL
+HORIZONTAL
+
+SLIDER
+450
+810
+650
+843
+r
+r
+0
+1
+0.5
+0.05
+1
+NIL
+HORIZONTAL
+
+SLIDER
+10
+847
+210
+880
+c0
+c0
+0
+1
+0.2
+0.05
+1
+NIL
+HORIZONTAL
+
+SLIDER
+230
+847
+430
+880
+fear-contagion-rate
+fear-contagion-rate
+0
+1
+0.3
+0.05
+1
+NIL
+HORIZONTAL
+
+SLIDER
+450
+847
+650
+880
+fear-decay-rate
+fear-decay-rate
+0
+1
+0.1
+0.05
+1
+NIL
+HORIZONTAL
+
+MONITOR
+670
+810
+820
+855
+Avg. Fear
+mean [fear] of turtles
+2
+1
+11
+
+MONITOR
+670
+857
+820
+902
+Avg. Cost-of-Verifying
+mean [cost-of-verifying] of turtles
+2
+1
+11
+
+MONITOR
+840
+810
+990
+855
+Alarm is False?
+alarm-is-false?
+17
 1
 11
 
