@@ -206,7 +206,7 @@ to spreading  ;; S -> B (share now) or S -> F (verify first)
   ]
 end
 
-to forgetting  ;; B -> S; F -> S  -- Each agent, regardless of belief state, forgets the news with a fixed probability pforget
+to forgetting  ;; B -> S; F -> S  -- Each agent, regardless of belief state, forgets the alarm with a fixed probability pforget
   ask turtles with [state = "B" or state = "F"][
     ifelse class = "Sc" [if random-float 1 < n-effect * time-effect * pForget-scholar [set state "S"]][
       ifelse class = "I" [if random-float 1 < n-effect * time-effect * pForget-influencer [set state "S"]]
@@ -215,7 +215,7 @@ to forgetting  ;; B -> S; F -> S  -- Each agent, regardless of belief state, for
   ]
 end
 
-to veryfing  ;; B-> F ; each agent can fact-check the hoax with a fixed probability pverify;
+to veryfing  ;; B-> F ; each agent can fact-check the alarm with a fixed probability pverify;
   ask turtles with [state = "B"][
     ifelse class = "Sc" [if random-float 1 < n-effect * time-effect * pVerify-scholar [set state "F"]][
       ifelse class = "I" [if random-float 1 < n-effect * time-effect * pVerify-influencer [set state "F"]]
@@ -320,8 +320,8 @@ SLIDER
 158
 158
 191
-alpha-hoaxCredibility
-alpha-hoaxCredibility
+alpha-alarmCredibility
+alpha-alarmCredibility
 0
 1
 0.8
@@ -437,7 +437,7 @@ TEXTBOX
 106
 107
 124
-Hoaxes diffusion
+Alarm diffusion
 14
 0.0
 1
@@ -935,25 +935,30 @@ alarm-is-false?
 @#$#@#$#@
 ## WHAT IS IT?
 
-An agent-based framework to simulate the diffusion process of a piece of misinformation according to the SBFC model in which the fake news and its debunking compete in a social network. Considering new classes of agents, this model is closer to reality and proposed different strategies how to mitigate and control misinformation.
+This is an adapted version of an agent-based model originally built to simulate misinformation diffusion (fake news vs. its debunking). Here it's repurposed to simulate how false alarms and real emergency warnings (evacuations, contaminations, fires, etc.) spread on social networks, where an agent's choice to share an alarm immediately or verify it first depends on its emotional state and personality.
+
+Each agent carries a "State" ("B" = shared the alarm without verifying first, "F" = verified/fact-checked it, "S" = not yet exposed) and belongs to a class (scholar, influencer, bot, or normal person) that still shapes its baseline forgetting/verifying rates, same as in the original model.
 
 
 ## HOW IT WORKS
 
-Each agent belongs to a class, scholar, influencer, bots (super-spreaders), and normal people. Each of these classes has its characteristics, and behavior (in the form of probabilities). Also, each agent may be a Believer, a Susceptible, or a Fact-checker (according to a "State" variable).
-In every unit of time, agents' states will be changed based on the neighbor's states and the probabilities assigned to the agents.
+Each agent also carries a fear level (its current emotional state) and fixed anxiety/skepticism personality traits, combining into a cost-of-verifying: cost-of-verifying = c0 + anxiety * fear - skepticism.
+
+When an agent is exposed to the alarm through a neighbor, it decides whether to share now or verify first using the rule cost-of-verifying > q * f * r, where q is the platform's fact-checking rate, f is the chance the alarm is false, and r is the cost of being flagged for sharing a false alarm. Fear itself spreads socially: an agent's fear rises when its neighbors are actively sharing, and decays otherwise.
+
+Each run also draws a ground-truth alarm-is-false? flag (via f) at setup, representing whether the alarm circulating in that run is actually false or a real warning — agents never observe this directly, only the public estimate f.
 
 
 ## HOW TO USE IT
 
-Set up the model by modifying the cluster of scholars (you can see the size of each cluster in the form of % of the total network, on the right side of "Chooser"), spreading rate, hoax credibility, % of initial believers, % of each type of bot in the network and probabilities of verifying and forgetting for each class. You can also play around with the effect of time. You can choose to see what if the effect of news gradually decreases during 7 days, or you can see what if agents do not interact during night time (when they are all sleeping.)
+Set up the model by modifying the cluster of scholars (you can see the size of each cluster in the form of % of the total network, on the right side of "Chooser"), spreading rate, alarm credibility, % of initial believers, % of each type of bot in the network, probabilities of verifying and forgetting for each class, and the new Emotion & Fact-Checking sliders (q, f, r, c0, fear-contagion-rate, fear-decay-rate). You can also play around with the effect of time. You can choose to see what if the effect of the alarm gradually decreases during 7 days, or you can see what if agents do not interact during night time (when they are all sleeping.)
 
 The graph on the right visualizes the number of agents for each different type of State (State of people). Also, you can see this graph for each class, separately.
 
 
 ## THINGS TO TRY
 
-Change the inputs to investigate their impact on diffusion processes.
+Change the inputs to investigate their impact on diffusion processes. In particular, sweep q (platform checking rate) to see whether there's a level that suppresses false-alarm reach without badly delaying real warnings.
 
 
 ## EXTENDING THE MODEL
@@ -1315,7 +1320,7 @@ NetLogo 6.3.0
     <enumeratedValueSet variable="pVerify-influencer">
       <value value="0.2"/>
     </enumeratedValueSet>
-    <enumeratedValueSet variable="alpha-hoaxCredibility">
+    <enumeratedValueSet variable="alpha-alarmCredibility">
       <value value="0.8"/>
     </enumeratedValueSet>
     <enumeratedValueSet variable="%-of-B-bot">
@@ -1371,7 +1376,7 @@ NetLogo 6.3.0
     <enumeratedValueSet variable="pVerify-influencer">
       <value value="0.05"/>
     </enumeratedValueSet>
-    <enumeratedValueSet variable="alpha-hoaxCredibility">
+    <enumeratedValueSet variable="alpha-alarmCredibility">
       <value value="0.8"/>
     </enumeratedValueSet>
     <enumeratedValueSet variable="%-of-B-bot">
@@ -1468,7 +1473,7 @@ NetLogo 6.3.0
       <value value="0.1"/>
       <value value="0.2"/>
     </enumeratedValueSet>
-    <enumeratedValueSet variable="alpha-hoaxCredibility">
+    <enumeratedValueSet variable="alpha-alarmCredibility">
       <value value="0.3"/>
       <value value="0.8"/>
     </enumeratedValueSet>
@@ -1539,7 +1544,7 @@ NetLogo 6.3.0
     <enumeratedValueSet variable="pVerify-influencer">
       <value value="0.1"/>
     </enumeratedValueSet>
-    <enumeratedValueSet variable="alpha-hoaxCredibility">
+    <enumeratedValueSet variable="alpha-alarmCredibility">
       <value value="0.8"/>
     </enumeratedValueSet>
     <enumeratedValueSet variable="%-of-B-bot">
@@ -1620,7 +1625,7 @@ NetLogo 6.3.0
       <value value="0.05"/>
       <value value="0.2"/>
     </enumeratedValueSet>
-    <enumeratedValueSet variable="alpha-hoaxCredibility">
+    <enumeratedValueSet variable="alpha-alarmCredibility">
       <value value="0.8"/>
     </enumeratedValueSet>
     <enumeratedValueSet variable="%-of-B-bot">
