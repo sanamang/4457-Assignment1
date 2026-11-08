@@ -1120,23 +1120,27 @@ alarm-type
 
 This is an adapted version of an agent-based model originally built to simulate misinformation diffusion (fake news vs. its debunking). Here it's repurposed to simulate how false alarms and real emergency warnings (evacuations, contaminations, fires, etc.) spread on social networks, where an agent's choice to share an alarm immediately or verify it first depends on its emotional state and personality.
 
-Each agent carries a "State" ("B" = shared the alarm without verifying first, "F" = verified/fact-checked it, "S" = not yet exposed) and belongs to a class (scholar, influencer, bot, or normal person) that still shapes its baseline forgetting/verifying rates, same as in the original model.
+Each agent carries a "State" ("S" = susceptible: does not hold the alarm, "B" = believer: sharing the alarm where friends can see it, "V" = verifying it before deciding, "H" = held: its post is hidden while the platform checks it, "F" = fact-checker: knows the alarm is false and does not share it) and belongs to a class (scholar, influencer, bot, or normal person) that still shapes its baseline forgetting/verifying rates, same as in the original model.
 
 
 ## HOW IT WORKS
 
-Each agent also carries a fear level (its current emotional state) and fixed anxiety/skepticism personality traits, combining into a cost-of-verifying: cost-of-verifying = c0 + anxiety * fear - skepticism.
+Each agent also carries a fear level (its current emotional state) and fixed anxiety/skepticism personality traits (skepticism is drawn between skepticism-min and skepticism-max), combining into a cost-of-verifying: cost-of-verifying = max(0, c0 + anxiety * fear - skepticism).
 
-When an agent is exposed to the alarm through a neighbor, it decides whether to share now or verify first using the rule cost-of-verifying > q * f * r, where q is the platform's fact-checking rate, f is the chance the alarm is false, and r is the cost of being flagged for sharing a false alarm. Fear itself spreads socially: an agent's fear rises when its neighbors are actively sharing, and decays otherwise.
+Only believers pass the alarm on. When a susceptible agent receives it from a believer friend, it shares now if cost-of-verifying + f * g > q * f * r, and otherwise verifies first. Here q is the platform's fact-checking level, f the chance the alarm is false, g the payoff from sharing, and r the cost of being flagged for sharing a false alarm. A verifying agent decides after verify-delay ticks: it rejects a false alarm (V -> F) or shares a true one (V -> B).
 
-Each run also draws a ground-truth alarm-is-false? flag (via f) at setup, representing whether the alarm circulating in that run is actually false or a real warning — agents never observe this directly, only the public estimate f.
+The platform checks each new post once, with probability q. A checked post is held (hidden) for check-delay ticks, then flagged (H -> F) if the alarm is false or shown (H -> B) if it is true. Forgetting (B, F -> S) works as in the original model, and believers can still realise on their own that an alarm is false (B -> F), for false alarms only. Fear spreads socially: an agent's fear rises when its friends are visibly sharing, and decays otherwise.
+
+The alarm-type chooser sets whether the alarm in a run is false or a true warning. Agents never observe this; they only know f. Exactly %-of-initial-believers % of agents (40 at the default 1%) start sharing at tick 0, and their posts get the platform check like any other.
+
+Reporters for experiments: false-alarm-reach (share of agents who were a visible believer at least once), peak-believers, tick-50-reached and tick-90-reached (-1 if never), share-never-reached, simulated-p (share of first decisions that were share now) and mean-c-at-decision.
 
 
 ## HOW TO USE IT
 
-Set up the model by modifying the cluster of scholars (you can see the size of each cluster in the form of % of the total network, on the right side of "Chooser"), spreading rate, alarm credibility, % of initial believers, % of each type of bot in the network, probabilities of verifying and forgetting for each class, and the new Emotion & Fact-Checking sliders (q, f, r, c0, fear-contagion-rate, fear-decay-rate). You can also play around with the effect of time. You can choose to see what if the effect of the alarm gradually decreases during 7 days, or you can see what if agents do not interact during night time (when they are all sleeping.)
+Set up the model by modifying the cluster of scholars (you can see the size of each cluster in the form of % of the total network, on the right side of "Chooser"), spreading rate, % of initial believers, % of each type of bot in the network, probabilities of verifying and forgetting for each class, and the Emotion & Fact-Checking controls (q, f, r, g, c0, fear-contagion-rate, fear-decay-rate, check-delay, verify-delay, skepticism-min, skepticism-max, alarm-type). You can also play around with the effect of time. You can choose to see what if the effect of the alarm gradually decreases during 7 days, or you can see what if agents do not interact during night time (when they are all sleeping.)
 
-The graph on the right visualizes the number of agents for each different type of State (State of people). Also, you can see this graph for each class, separately.
+The State-of-people graph shows the number of agents in each state, including verifying and held agents. Also, you can see this graph for each class, separately.
 
 
 ## THINGS TO TRY
