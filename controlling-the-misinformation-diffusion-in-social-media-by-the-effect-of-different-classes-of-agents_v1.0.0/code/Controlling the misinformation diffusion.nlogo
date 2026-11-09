@@ -1,26 +1,38 @@
 extensions [ nw ]
 
-turtles-own [ node-id xcord ycord degree community state class fear anxiety skepticism cost-of-verifying ] ;; Three states of agents: "B" (believer) ;  "F" (factChecker) ; "S" (susceptible)
-                            ;;, Five classes: "Sc" (Scholar), "I" (influencer), "N" (Normal), "BBot" (Believer bots), "FBot" (Fact checker bots)
-                            ;;, Emotion/personality (extension): fear = emotional state (e), anxiety/skepticism = personality traits (a, s)
-                            ;;, cost-of-verifying = c = c0 + anxiety * fear - skepticism
+turtles-own [ node-id xcord ycord degree community state class fear anxiety skepticism cost-of-verifying
+              countdown reached? ever-shared? tick-reached decided? shared-now? c-at-decision ]
+  ;; Five states: "S" (susceptible), "B" (believer: sharing the alarm, visible to friends),
+  ;;   "V" (verifying the alarm before deciding), "H" (held: post hidden while the platform checks it),
+  ;;   "F" (fact-checker: knows the alarm is false and does not share it)
+  ;; Five classes: "Sc" (Scholar), "I" (influencer), "N" (Normal), "BBot" (Believer bots), "FBot" (Fact checker bots)
+  ;; Emotion/personality: fear = emotional state (e); anxiety, skepticism = personality traits (a, s)
+  ;; cost-of-verifying = c = max(0, c0 + anxiety * fear - skepticism)
+  ;; countdown = ticks left in the V or H state
+  ;; Tracking: reached? (has received the alarm at least once), ever-shared? (was a visible believer at least once),
+  ;;   tick-reached (first tick reached, -1 if never), decided? / shared-now? / c-at-decision (the agent's first
+  ;;   share-now-or-verify decision and its cost of verifying at that moment)
 
 links-own [ weigth ]  ;; the weight of the links between agents
-globals [ number-of-agents total-ticks time-effect n-effect i-s-sc i-b-sc i-f-sc i-s-in i-b-in i-f-in i-s-n i-b-n i-f-n i-b-b i-f-b alarm-is-false? ]
+globals [ number-of-agents total-ticks time-effect n-effect i-s-sc i-b-sc i-f-sc i-s-in i-b-in i-f-in i-s-n i-b-n i-f-n i-b-b i-f-b
+          peak-believers tick-50-reached tick-90-reached ]
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;   SETUP   ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
 to setup
+  if skepticism-min > skepticism-max [ error "skepticism-min must not be greater than skepticism-max" ]
   clear-all
   set number-of-agents 4039
   set total-ticks 168
+  set tick-50-reached -1
+  set tick-90-reached -1
   nw:set-context turtles links
   nw:load-gml "facebook.gml" turtles links
+  reset-ticks             ;; start the tick counter at 0 before seeding, so seeds are recorded as reached at tick 0
   setup-turtles
-  set alarm-is-false? random-float 1 < f   ;; ground truth of this run's alarm, drawn from the doc's f parameter; agents never observe it directly
+  update-tracking
   update-plot
   update-output
-  reset-ticks
 end
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;   GO   ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
@@ -35,13 +47,16 @@ to go
     ifelse 3 <= remainder (ticks / 6) 4 [set n-effect 0][set n-effect 1]
   ][set n-effect 1]
 
-  spread-fear             ;; emotion/personality extension: fear rises with exposed sharers, decays otherwise
+  finish-pending          ;; held posts and verifying agents whose delay has run out reach their outcome
+
+  spread-fear             ;; fear rises with visible believers among friends, decays otherwise
   update-cost             ;; recompute cost-of-verifying = c0 + anxiety * fear - skepticism
 
   spreading               ;
   forgetting              ;-- Three main procedures for agent's behavior
   veryfing                ;
 
+  update-tracking
   update-colors           ;; just to improve the visualisation
   update-plot             ;; update plots of the Interface
   update-plot-normal
@@ -58,9 +73,16 @@ to setup-turtles
     set size 3
     set color violet
     set anxiety random-float 1
-    set skepticism random-float 1
+    set skepticism skepticism-min + random-float (skepticism-max - skepticism-min)
     set fear 0
-    set cost-of-verifying c0
+    set cost-of-verifying max list 0 (c0 - skepticism)
+    set countdown 0
+    set reached? false
+    set ever-shared? false
+    set tick-reached -1
+    set decided? false
+    set shared-now? false
+    set c-at-decision 0
   ]
 
   if scholars-community != "None" [
@@ -92,23 +114,27 @@ end
 
 to update-output
   clear-output
-  output-print "* Diffusion model in social networks \n with different classes of people - 10% initial bilievers \n darker colors are influencers - lighter colors are scholars \n Believer bots are yellow and FC bots are greed *"
+  output-print (word "* False-alarm diffusion with a fact-checking platform - " %-of-initial-believers "% initial believers \n alarm type: " alarm-type " \n darker colors are influencers - lighter colors are scholars \n orange = verifying, gray = held for a platform check *")
 end
 
 
 to initialization
+  ask turtles [ set state "S" ]
 
-  set i-b-b count turtles with [state = "B" and class = "BBot"]
-  set i-f-b count turtles with [state = "F" and class = "FBot"]
-
-  ask turtles[
-    ifelse count turtles with [state = "B"] < (%-of-initial-believers - %-of-B-bot) / 100 * number-of-agents [
-      ifelse random 100 <= %-of-initial-believers [ set state "B" ][ set state "S" ]
-    ][ set state "S" ]
+  ;; seeds: exactly round(%-of-initial-believers % of the network) agents start sharing at tick 0;
+  ;; each seed's post is a new post, so it gets the platform check like any other
+  let n-seeds round (%-of-initial-believers / 100 * number-of-agents)
+  let candidates turtles with [class != "BBot" and class != "FBot"]
+  ask n-of (min list n-seeds count candidates) candidates [
+    mark-reached
+    start-sharing
   ]
 
   ask turtles with [class = "BBot"][set state "B"]
   ask turtles with [class = "FBot"][set state "F"]
+
+  set i-b-b count turtles with [state = "B" and class = "BBot"]
+  set i-f-b count turtles with [state = "F" and class = "FBot"]
 
   set i-s-sc count turtles with [state = "S" and class = "Sc"]
   set i-f-sc count turtles with [state = "F" and class = "Sc"]
@@ -128,8 +154,10 @@ end
 to update-colors
   ask turtles [
     if state = "B" [ ifelse class = "Sc" [set color blue + 3][ifelse class = "I" [set color blue - 3][ifelse class = "BBot" [set color yellow][set color blue]]]]
-      if state = "F" [ ifelse class = "Sc" [set color red + 3][ifelse class = "I" [set color red - 3][ifelse class = "FBot" [set color green][set color red]]]]
+    if state = "F" [ ifelse class = "Sc" [set color red + 3][ifelse class = "I" [set color red - 3][ifelse class = "FBot" [set color green][set color red]]]]
     if state = "S" [ ifelse class = "Sc" [set color violet + 3][ifelse class = "I" [set color violet - 3][set color violet]]]
+    if state = "V" [ set color orange ]
+    if state = "H" [ set color gray ]
   ]
 end
 
@@ -141,6 +169,10 @@ to update-plot
   plot count turtles with [state = "F"]
   set-current-plot-pen "SUSCEPTIBLES"
   plot count turtles with [state = "S"]
+  set-current-plot-pen "VERIFYING"
+  plot count turtles with [state = "V"]
+  set-current-plot-pen "HELD"
+  plot count turtles with [state = "H"]
 end
 
 to update-plot-normal
@@ -175,7 +207,23 @@ end
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;  GO PROCEDURES ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
-to spread-fear  ;; emotion/personality extension: fear (e) rises with exposure to neighbors who are currently sharing (B), decays otherwise
+to finish-pending  ;; H -> F/B (platform check result) ; V -> F/B (own verification result)
+  ask turtles with [state = "H" or state = "V"][
+    set countdown countdown - 1
+    if countdown <= 0 [
+      ifelse state = "H" [
+        ;; the platform's check is finished: a false alarm is flagged, a true warning is confirmed and shown
+        ifelse alarm-false? [ set state "F" ][ become-visible-believer ]
+      ][
+        ;; the agent's own verification is finished: reject a false alarm, share a confirmed true warning
+        ;; (sharing is a new post, so the platform may check it)
+        ifelse alarm-false? [ set state "F" ][ start-sharing ]
+      ]
+    ]
+  ]
+end
+
+to spread-fear  ;; fear (e) rises with the share of friends who are visible believers (B), decays otherwise
   ask turtles [
     let n-neighbors count link-neighbors
     let nB count link-neighbors with [state = "B"]
@@ -189,19 +237,24 @@ to update-cost  ;; c = c0 + a * e - s, per the formal model's Emotion and Person
   ask turtles [ set cost-of-verifying max list 0 (c0 + anxiety * fear - skepticism) ]
 end
 
-to spreading  ;; S -> B (share now) or S -> F (verify first)
-  ; exposure to the alarm still spreads socially through the network (neighbor contact),
-  ; but once exposed, the agent's choice follows the game's decision rule: share now when
-  ; cost-of-verifying > q * f * r, otherwise verify first (see "NetLogo Model" section of the proposal)
-  ask turtles with [state = "S"][
-    let n-exposed count link-neighbors with [state = "B" or state = "F"]
-    if n-exposed > 0 [
-      let exposure-chance n-effect * time-effect * beta-spreadingRate
-      if random-float 1 < exposure-chance [
-        ifelse cost-of-verifying > q * f * r
-          [ set state "B" ]
-          [ set state "F" ]
+to spreading  ;; S -> B or H (share now) ; S -> V (verify first)
+  ; only visible believers pass the alarm on. The agents exposed this tick are fixed before anyone
+  ; decides, so an agent who starts sharing this tick cannot expose others until the next tick.
+  ; Once an agent receives the alarm, it follows the game's decision rule: share now when
+  ; c + f * g > q * f * r, otherwise verify first.
+  let exposed turtles with [state = "S" and any? link-neighbors with [state = "B"]]
+  ask exposed [
+    if random-float 1 < n-effect * time-effect * beta-spreadingRate [
+      mark-reached
+      let share-now? (cost-of-verifying + f * g > q * f * r)
+      if not decided? [
+        set decided? true
+        set shared-now? share-now?
+        set c-at-decision cost-of-verifying
       ]
+      ifelse share-now?
+        [ start-sharing ]
+        [ set state "V" set countdown verify-delay ]
     ]
   ]
 end
@@ -215,13 +268,71 @@ to forgetting  ;; B -> S; F -> S  -- Each agent, regardless of belief state, for
   ]
 end
 
-to veryfing  ;; B-> F ; each agent can fact-check the alarm with a fixed probability pverify;
-  ask turtles with [state = "B"][
-    ifelse class = "Sc" [if random-float 1 < n-effect * time-effect * pVerify-scholar [set state "F"]][
-      ifelse class = "I" [if random-float 1 < n-effect * time-effect * pVerify-influencer [set state "F"]]
-        [if class = "N" and random-float 1 < n-effect * time-effect * pVerify [set state "F"]]
-      ]
+to veryfing  ;; B -> F ; a believer can realize the alarm is false with a fixed probability pverify (false alarms only)
+  if alarm-false? [
+    ask turtles with [state = "B"][
+      ifelse class = "Sc" [if random-float 1 < n-effect * time-effect * pVerify-scholar [set state "F"]][
+        ifelse class = "I" [if random-float 1 < n-effect * time-effect * pVerify-influencer [set state "F"]]
+          [if class = "N" and random-float 1 < n-effect * time-effect * pVerify [set state "F"]]
+        ]
+    ]
   ]
+end
+
+;;;;;;;;;;;;;;;;;;;;;;; PLATFORM AND SHARING ;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+to start-sharing  ;; turtle procedure: the agent posts the alarm; the platform checks this post once, with probability q
+  ifelse random-float 1 < q
+    [ set state "H" set countdown check-delay ]
+    [ become-visible-believer ]
+end
+
+to become-visible-believer  ;; turtle procedure
+  set state "B"
+  set ever-shared? true
+end
+
+to mark-reached  ;; turtle procedure: records the first time the agent receives the alarm
+  if not reached? [
+    set reached? true
+    set tick-reached ticks
+  ]
+end
+
+;;;;;;;;;;;;;;;;;;;;;;; TRACKING ;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+to update-tracking
+  let n-believers count turtles with [state = "B"]
+  if n-believers > peak-believers [ set peak-believers n-believers ]
+  let n-reached count turtles with [reached?]
+  if tick-50-reached = -1 and n-reached >= 0.5 * number-of-agents [ set tick-50-reached ticks ]
+  if tick-90-reached = -1 and n-reached >= 0.9 * number-of-agents [ set tick-90-reached ticks ]
+end
+
+;;;;;;;;;;;;;;;;;;;;;;; REPORTERS ;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+to-report alarm-false?
+  report alarm-type = "false"
+end
+
+to-report false-alarm-reach  ;; share of agents who were a visible believer at least once
+  report count turtles with [ever-shared?] / count turtles
+end
+
+to-report share-never-reached  ;; share of agents who never received the alarm
+  report count turtles with [not reached?] / count turtles
+end
+
+to-report simulated-p  ;; share of deciding agents whose first decision was to share now (-1 if nobody has decided yet)
+  let deciders turtles with [decided?]
+  if not any? deciders [ report -1 ]
+  report count deciders with [shared-now?] / count deciders
+end
+
+to-report mean-c-at-decision  ;; mean cost of verifying at each agent's first decision (-1 if nobody has decided yet)
+  let deciders turtles with [decided?]
+  if not any? deciders [ report -1 ]
+  report mean [c-at-decision] of deciders
 end
 
 ;;;;;;;;;;;;;;;;;;;;;;; UTILS ;;;;;;;;;;;;;;;;;;;;;;;;;;;;
@@ -315,21 +426,6 @@ beta-spreadingRate
 NIL
 HORIZONTAL
 
-SLIDER
-8
-158
-158
-191
-alpha-alarmCredibility
-alpha-alarmCredibility
-0
-1
-0.8
-0.01
-1
-NIL
-HORIZONTAL
-
 PLOT
 447
 405
@@ -349,6 +445,8 @@ PENS
 "BELIEVERS" 1.0 0 -13345367 true "" ""
 "SUSCEPTIBLES" 1.0 0 -7500403 true "" ""
 "FACT-CHECKERS" 1.0 0 -2674135 true "" ""
+"VERIFYING" 1.0 0 -955883 true "" ""
+"HELD" 1.0 0 -4539718 true "" ""
 
 MONITOR
 783
@@ -605,7 +703,7 @@ SLIDER
 %-of-B-bot
 0
 5
-5.0
+0.0
 0.5
 1
 NIL
@@ -631,7 +729,7 @@ SLIDER
 %-of-F-bot
 0
 5
-5.0
+0.0
 0.5
 1
 NIL
@@ -656,7 +754,7 @@ CHOOSER
 scholars-community
 scholars-community
 "None" 1 2 3 4 5 6 7 8
-7
+0
 
 MONITOR
 388
@@ -749,7 +847,7 @@ SLIDER
 %-of-initial-believers
 0
 100
-10.0
+1.0
 1
 1
 NIL
@@ -833,7 +931,7 @@ f
 f
 0
 1
-0.3
+0.5
 0.05
 1
 NIL
@@ -847,8 +945,8 @@ SLIDER
 r
 r
 0
-1
-0.5
+5
+2.5
 0.05
 1
 NIL
@@ -926,34 +1024,123 @@ MONITOR
 810
 990
 855
-Alarm is False?
-alarm-is-false?
-17
+False-alarm reach
+false-alarm-reach
+3
 1
 11
+
+SLIDER
+10
+884
+210
+917
+g
+g
+0
+1
+0.5
+0.05
+1
+NIL
+HORIZONTAL
+
+SLIDER
+230
+884
+430
+917
+check-delay
+check-delay
+1
+10
+2
+1
+1
+NIL
+HORIZONTAL
+
+SLIDER
+450
+884
+650
+917
+verify-delay
+verify-delay
+1
+10
+1
+1
+1
+NIL
+HORIZONTAL
+
+SLIDER
+10
+921
+210
+954
+skepticism-min
+skepticism-min
+0
+1
+0
+0.05
+1
+NIL
+HORIZONTAL
+
+SLIDER
+230
+921
+430
+954
+skepticism-max
+skepticism-max
+0
+1
+1
+0.05
+1
+NIL
+HORIZONTAL
+
+CHOOSER
+450
+921
+650
+966
+alarm-type
+alarm-type
+"false" "true"
+0
 
 @#$#@#$#@
 ## WHAT IS IT?
 
 This is an adapted version of an agent-based model originally built to simulate misinformation diffusion (fake news vs. its debunking). Here it's repurposed to simulate how false alarms and real emergency warnings (evacuations, contaminations, fires, etc.) spread on social networks, where an agent's choice to share an alarm immediately or verify it first depends on its emotional state and personality.
 
-Each agent carries a "State" ("B" = shared the alarm without verifying first, "F" = verified/fact-checked it, "S" = not yet exposed) and belongs to a class (scholar, influencer, bot, or normal person) that still shapes its baseline forgetting/verifying rates, same as in the original model.
+Each agent carries a "State" ("S" = susceptible: does not hold the alarm, "B" = believer: sharing the alarm where friends can see it, "V" = verifying it before deciding, "H" = held: its post is hidden while the platform checks it, "F" = fact-checker: knows the alarm is false and does not share it) and belongs to a class (scholar, influencer, bot, or normal person) that still shapes its baseline forgetting/verifying rates, same as in the original model.
 
 
 ## HOW IT WORKS
 
-Each agent also carries a fear level (its current emotional state) and fixed anxiety/skepticism personality traits, combining into a cost-of-verifying: cost-of-verifying = c0 + anxiety * fear - skepticism.
+Each agent also carries a fear level (its current emotional state) and fixed anxiety/skepticism personality traits (skepticism is drawn between skepticism-min and skepticism-max), combining into a cost-of-verifying: cost-of-verifying = max(0, c0 + anxiety * fear - skepticism).
 
-When an agent is exposed to the alarm through a neighbor, it decides whether to share now or verify first using the rule cost-of-verifying > q * f * r, where q is the platform's fact-checking rate, f is the chance the alarm is false, and r is the cost of being flagged for sharing a false alarm. Fear itself spreads socially: an agent's fear rises when its neighbors are actively sharing, and decays otherwise.
+Only believers pass the alarm on. When a susceptible agent receives it from a believer friend, it shares now if cost-of-verifying + f * g > q * f * r, and otherwise verifies first. Here q is the platform's fact-checking level, f the chance the alarm is false, g the payoff from sharing, and r the cost of being flagged for sharing a false alarm. A verifying agent decides after verify-delay ticks: it rejects a false alarm (V -> F) or shares a true one (V -> B).
 
-Each run also draws a ground-truth alarm-is-false? flag (via f) at setup, representing whether the alarm circulating in that run is actually false or a real warning — agents never observe this directly, only the public estimate f.
+The platform checks each new post once, with probability q. A checked post is held (hidden) for check-delay ticks, then flagged (H -> F) if the alarm is false or shown (H -> B) if it is true. Forgetting (B, F -> S) works as in the original model, and believers can still realise on their own that an alarm is false (B -> F), for false alarms only. Fear spreads socially: an agent's fear rises when its friends are visibly sharing, and decays otherwise.
+
+The alarm-type chooser sets whether the alarm in a run is false or a true warning. Agents never observe this; they only know f. Exactly %-of-initial-believers % of agents (40 at the default 1%) start sharing at tick 0, and their posts get the platform check like any other.
+
+Reporters for experiments: false-alarm-reach (share of agents who were a visible believer at least once), peak-believers, tick-50-reached and tick-90-reached (-1 if never), share-never-reached, simulated-p (share of first decisions that were share now) and mean-c-at-decision.
 
 
 ## HOW TO USE IT
 
-Set up the model by modifying the cluster of scholars (you can see the size of each cluster in the form of % of the total network, on the right side of "Chooser"), spreading rate, alarm credibility, % of initial believers, % of each type of bot in the network, probabilities of verifying and forgetting for each class, and the new Emotion & Fact-Checking sliders (q, f, r, c0, fear-contagion-rate, fear-decay-rate). You can also play around with the effect of time. You can choose to see what if the effect of the alarm gradually decreases during 7 days, or you can see what if agents do not interact during night time (when they are all sleeping.)
+Set up the model by modifying the cluster of scholars (you can see the size of each cluster in the form of % of the total network, on the right side of "Chooser"), spreading rate, % of initial believers, % of each type of bot in the network, probabilities of verifying and forgetting for each class, and the Emotion & Fact-Checking controls (q, f, r, g, c0, fear-contagion-rate, fear-decay-rate, check-delay, verify-delay, skepticism-min, skepticism-max, alarm-type). You can also play around with the effect of time. You can choose to see what if the effect of the alarm gradually decreases during 7 days, or you can see what if agents do not interact during night time (when they are all sleeping.)
 
-The graph on the right visualizes the number of agents for each different type of State (State of people). Also, you can see this graph for each class, separately.
+The State-of-people graph shows the number of agents in each state, including verifying and held agents. Also, you can see this graph for each class, separately.
 
 
 ## THINGS TO TRY
@@ -1286,358 +1473,6 @@ NetLogo 6.3.0
 @#$#@#$#@
 @#$#@#$#@
 @#$#@#$#@
-<experiments>
-  <experiment name="experiment-test" repetitions="50" runMetricsEveryStep="true">
-    <setup>setup</setup>
-    <go>go</go>
-    <metric>count turtles with [state = "B"]</metric>
-    <metric>count turtles with [state = "F"]</metric>
-    <metric>count turtles with [state = "S"]</metric>
-    <metric>count turtles with [state = "B" and class = "Sc"]</metric>
-    <metric>count turtles with [state = "F" and class = "Sc"]</metric>
-    <metric>count turtles with [state = "S" and class = "Sc"]</metric>
-    <metric>count turtles with [state = "B" and class = "I"]</metric>
-    <metric>count turtles with [state = "F" and class = "I"]</metric>
-    <metric>count turtles with [state = "S" and class = "I"]</metric>
-    <metric>count turtles with [state = "B" and class = "N"]</metric>
-    <metric>count turtles with [state = "F" and class = "N"]</metric>
-    <metric>count turtles with [state = "S" and class = "N"]</metric>
-    <enumeratedValueSet variable="pVerify">
-      <value value="0.05"/>
-    </enumeratedValueSet>
-    <enumeratedValueSet variable="pVerify-scholar">
-      <value value="0.2"/>
-    </enumeratedValueSet>
-    <enumeratedValueSet variable="pForget">
-      <value value="0.1"/>
-    </enumeratedValueSet>
-    <enumeratedValueSet variable="%-of-initial-believers">
-      <value value="10"/>
-    </enumeratedValueSet>
-    <enumeratedValueSet variable="scholars-community">
-      <value value="4"/>
-    </enumeratedValueSet>
-    <enumeratedValueSet variable="pVerify-influencer">
-      <value value="0.2"/>
-    </enumeratedValueSet>
-    <enumeratedValueSet variable="alpha-alarmCredibility">
-      <value value="0.8"/>
-    </enumeratedValueSet>
-    <enumeratedValueSet variable="%-of-B-bot">
-      <value value="0"/>
-    </enumeratedValueSet>
-    <enumeratedValueSet variable="%-of-F-bot">
-      <value value="0"/>
-    </enumeratedValueSet>
-    <enumeratedValueSet variable="pForget-influencer">
-      <value value="0.02"/>
-    </enumeratedValueSet>
-    <enumeratedValueSet variable="beta-spreadingRate">
-      <value value="0.5"/>
-    </enumeratedValueSet>
-    <enumeratedValueSet variable="pForget-scholar">
-      <value value="0.05"/>
-    </enumeratedValueSet>
-  </experiment>
-  <experiment name="experiment-v1" repetitions="5" runMetricsEveryStep="true">
-    <setup>setup</setup>
-    <go>go</go>
-    <metric>count turtles with [state = "B"]</metric>
-    <metric>count turtles with [state = "F"]</metric>
-    <metric>count turtles with [state = "S"]</metric>
-    <metric>count turtles with [state = "B" and class = "Sc"]</metric>
-    <metric>count turtles with [state = "F" and class = "Sc"]</metric>
-    <metric>count turtles with [state = "S" and class = "Sc"]</metric>
-    <metric>count turtles with [state = "B" and class = "I"]</metric>
-    <metric>count turtles with [state = "F" and class = "I"]</metric>
-    <metric>count turtles with [state = "S" and class = "I"]</metric>
-    <metric>count turtles with [state = "B" and class = "N"]</metric>
-    <metric>count turtles with [state = "F" and class = "N"]</metric>
-    <metric>count turtles with [state = "S" and class = "N"]</metric>
-    <enumeratedValueSet variable="pVerify">
-      <value value="0.05"/>
-    </enumeratedValueSet>
-    <enumeratedValueSet variable="pVerify-scholar">
-      <value value="0.05"/>
-      <value value="0.1"/>
-      <value value="0.15"/>
-      <value value="0.2"/>
-    </enumeratedValueSet>
-    <enumeratedValueSet variable="pForget">
-      <value value="0.1"/>
-    </enumeratedValueSet>
-    <enumeratedValueSet variable="%-of-initial-believers">
-      <value value="10"/>
-    </enumeratedValueSet>
-    <enumeratedValueSet variable="scholars-community">
-      <value value="3"/>
-      <value value="4"/>
-    </enumeratedValueSet>
-    <enumeratedValueSet variable="pVerify-influencer">
-      <value value="0.05"/>
-    </enumeratedValueSet>
-    <enumeratedValueSet variable="alpha-alarmCredibility">
-      <value value="0.8"/>
-    </enumeratedValueSet>
-    <enumeratedValueSet variable="%-of-B-bot">
-      <value value="0"/>
-    </enumeratedValueSet>
-    <enumeratedValueSet variable="%-of-F-bot">
-      <value value="0"/>
-    </enumeratedValueSet>
-    <enumeratedValueSet variable="pForget-influencer">
-      <value value="0.1"/>
-    </enumeratedValueSet>
-    <enumeratedValueSet variable="beta-spreadingRate">
-      <value value="0.5"/>
-    </enumeratedValueSet>
-    <enumeratedValueSet variable="pForget-scholar">
-      <value value="0.05"/>
-      <value value="0.1"/>
-    </enumeratedValueSet>
-  </experiment>
-  <experiment name="experiment-final" repetitions="4" runMetricsEveryStep="false">
-    <setup>setup</setup>
-    <go>go</go>
-    <metric>count turtles with [state = "B"]</metric>
-    <metric>count turtles with [state = "F"]</metric>
-    <metric>count turtles with [state = "S"]</metric>
-    <metric>count turtles with [state = "B" and class = "Sc"]</metric>
-    <metric>count turtles with [state = "F" and class = "Sc"]</metric>
-    <metric>count turtles with [state = "S" and class = "Sc"]</metric>
-    <metric>count turtles with [state = "B" and class = "I"]</metric>
-    <metric>count turtles with [state = "F" and class = "I"]</metric>
-    <metric>count turtles with [state = "S" and class = "I"]</metric>
-    <metric>count turtles with [state = "B" and class = "N"]</metric>
-    <metric>count turtles with [state = "F" and class = "N"]</metric>
-    <metric>count turtles with [state = "S" and class = "N"]</metric>
-    <metric>i-s-sc</metric>
-    <metric>i-b-sc</metric>
-    <metric>i-f-sc</metric>
-    <metric>i-s-in</metric>
-    <metric>i-b-in</metric>
-    <metric>i-f-in</metric>
-    <metric>i-s-n</metric>
-    <metric>i-b-n</metric>
-    <metric>i-f-n</metric>
-    <metric>i-b-b</metric>
-    <metric>i-f-b</metric>
-    <enumeratedValueSet variable="has-time-effect?">
-      <value value="false"/>
-    </enumeratedValueSet>
-    <enumeratedValueSet variable="pVerify-scholar">
-      <value value="0.05"/>
-      <value value="0.1"/>
-      <value value="0.2"/>
-      <value value="0.3"/>
-    </enumeratedValueSet>
-    <enumeratedValueSet variable="pForget">
-      <value value="0.1"/>
-    </enumeratedValueSet>
-    <enumeratedValueSet variable="scholars-community">
-      <value value="&quot;None&quot;"/>
-      <value value="4"/>
-      <value value="7"/>
-      <value value="8"/>
-    </enumeratedValueSet>
-    <enumeratedValueSet variable="%-of-F-bot">
-      <value value="0"/>
-      <value value="1"/>
-    </enumeratedValueSet>
-    <enumeratedValueSet variable="pForget-influencer">
-      <value value="0.02"/>
-      <value value="0.05"/>
-      <value value="0.1"/>
-    </enumeratedValueSet>
-    <enumeratedValueSet variable="beta-spreadingRate">
-      <value value="0.5"/>
-      <value value="0.75"/>
-    </enumeratedValueSet>
-    <enumeratedValueSet variable="pForget-scholar">
-      <value value="0.02"/>
-      <value value="0.05"/>
-      <value value="0.1"/>
-    </enumeratedValueSet>
-    <enumeratedValueSet variable="pVerify">
-      <value value="0.05"/>
-    </enumeratedValueSet>
-    <enumeratedValueSet variable="night-time-effect?">
-      <value value="false"/>
-    </enumeratedValueSet>
-    <enumeratedValueSet variable="%-of-initial-believers">
-      <value value="10"/>
-      <value value="40"/>
-    </enumeratedValueSet>
-    <enumeratedValueSet variable="pVerify-influencer">
-      <value value="0.05"/>
-      <value value="0.1"/>
-      <value value="0.2"/>
-    </enumeratedValueSet>
-    <enumeratedValueSet variable="alpha-alarmCredibility">
-      <value value="0.3"/>
-      <value value="0.8"/>
-    </enumeratedValueSet>
-    <enumeratedValueSet variable="%-of-B-bot">
-      <value value="0"/>
-      <value value="1"/>
-    </enumeratedValueSet>
-  </experiment>
-  <experiment name="experiment" repetitions="2" runMetricsEveryStep="false">
-    <setup>setup</setup>
-    <go>go</go>
-    <metric>count turtles with [state = "B"]</metric>
-    <metric>count turtles with [state = "F"]</metric>
-    <metric>count turtles with [state = "S"]</metric>
-    <metric>count turtles with [state = "B" and class = "Sc"]</metric>
-    <metric>count turtles with [state = "F" and class = "Sc"]</metric>
-    <metric>count turtles with [state = "S" and class = "Sc"]</metric>
-    <metric>count turtles with [state = "B" and class = "I"]</metric>
-    <metric>count turtles with [state = "F" and class = "I"]</metric>
-    <metric>count turtles with [state = "S" and class = "I"]</metric>
-    <metric>count turtles with [state = "B" and class = "N"]</metric>
-    <metric>count turtles with [state = "F" and class = "N"]</metric>
-    <metric>count turtles with [state = "S" and class = "N"]</metric>
-    <metric>i-s-sc</metric>
-    <metric>i-b-sc</metric>
-    <metric>i-f-sc</metric>
-    <metric>i-s-in</metric>
-    <metric>i-b-in</metric>
-    <metric>i-f-in</metric>
-    <metric>i-s-n</metric>
-    <metric>i-b-n</metric>
-    <metric>i-f-n</metric>
-    <metric>i-b-b</metric>
-    <metric>i-f-b</metric>
-    <enumeratedValueSet variable="has-time-effect?">
-      <value value="false"/>
-    </enumeratedValueSet>
-    <enumeratedValueSet variable="pVerify-scholar">
-      <value value="0.05"/>
-    </enumeratedValueSet>
-    <enumeratedValueSet variable="pForget">
-      <value value="0.1"/>
-    </enumeratedValueSet>
-    <enumeratedValueSet variable="scholars-community">
-      <value value="4"/>
-    </enumeratedValueSet>
-    <enumeratedValueSet variable="%-of-F-bot">
-      <value value="1"/>
-    </enumeratedValueSet>
-    <enumeratedValueSet variable="pForget-influencer">
-      <value value="0.02"/>
-    </enumeratedValueSet>
-    <enumeratedValueSet variable="beta-spreadingRate">
-      <value value="0.3"/>
-    </enumeratedValueSet>
-    <enumeratedValueSet variable="pForget-scholar">
-      <value value="0.02"/>
-    </enumeratedValueSet>
-    <enumeratedValueSet variable="pVerify">
-      <value value="0.05"/>
-    </enumeratedValueSet>
-    <enumeratedValueSet variable="night-time-effect?">
-      <value value="false"/>
-    </enumeratedValueSet>
-    <enumeratedValueSet variable="%-of-initial-believers">
-      <value value="20"/>
-    </enumeratedValueSet>
-    <enumeratedValueSet variable="pVerify-influencer">
-      <value value="0.1"/>
-    </enumeratedValueSet>
-    <enumeratedValueSet variable="alpha-alarmCredibility">
-      <value value="0.8"/>
-    </enumeratedValueSet>
-    <enumeratedValueSet variable="%-of-B-bot">
-      <value value="1"/>
-    </enumeratedValueSet>
-  </experiment>
-  <experiment name="experiment-bots" repetitions="1" runMetricsEveryStep="false">
-    <setup>setup</setup>
-    <go>go</go>
-    <metric>count turtles with [state = "B"]</metric>
-    <metric>count turtles with [state = "F"]</metric>
-    <metric>count turtles with [state = "S"]</metric>
-    <metric>count turtles with [state = "B" and class = "Sc"]</metric>
-    <metric>count turtles with [state = "F" and class = "Sc"]</metric>
-    <metric>count turtles with [state = "S" and class = "Sc"]</metric>
-    <metric>count turtles with [state = "B" and class = "I"]</metric>
-    <metric>count turtles with [state = "F" and class = "I"]</metric>
-    <metric>count turtles with [state = "S" and class = "I"]</metric>
-    <metric>count turtles with [state = "B" and class = "N"]</metric>
-    <metric>count turtles with [state = "F" and class = "N"]</metric>
-    <metric>count turtles with [state = "S" and class = "N"]</metric>
-    <metric>i-s-sc</metric>
-    <metric>i-b-sc</metric>
-    <metric>i-f-sc</metric>
-    <metric>i-s-in</metric>
-    <metric>i-b-in</metric>
-    <metric>i-f-in</metric>
-    <metric>i-s-n</metric>
-    <metric>i-b-n</metric>
-    <metric>i-f-n</metric>
-    <metric>i-b-b</metric>
-    <metric>i-f-b</metric>
-    <enumeratedValueSet variable="has-time-effect?">
-      <value value="false"/>
-    </enumeratedValueSet>
-    <enumeratedValueSet variable="pVerify-scholar">
-      <value value="0.05"/>
-      <value value="0.2"/>
-    </enumeratedValueSet>
-    <enumeratedValueSet variable="pForget">
-      <value value="0.1"/>
-    </enumeratedValueSet>
-    <enumeratedValueSet variable="scholars-community">
-      <value value="&quot;None&quot;"/>
-      <value value="4"/>
-      <value value="7"/>
-      <value value="8"/>
-    </enumeratedValueSet>
-    <enumeratedValueSet variable="%-of-F-bot">
-      <value value="0"/>
-      <value value="1"/>
-      <value value="2"/>
-      <value value="3"/>
-      <value value="4"/>
-      <value value="5"/>
-    </enumeratedValueSet>
-    <enumeratedValueSet variable="pForget-influencer">
-      <value value="0.05"/>
-      <value value="0.1"/>
-    </enumeratedValueSet>
-    <enumeratedValueSet variable="beta-spreadingRate">
-      <value value="0.5"/>
-    </enumeratedValueSet>
-    <enumeratedValueSet variable="pForget-scholar">
-      <value value="0.05"/>
-      <value value="0.1"/>
-    </enumeratedValueSet>
-    <enumeratedValueSet variable="pVerify">
-      <value value="0.05"/>
-    </enumeratedValueSet>
-    <enumeratedValueSet variable="night-time-effect?">
-      <value value="false"/>
-    </enumeratedValueSet>
-    <enumeratedValueSet variable="%-of-initial-believers">
-      <value value="10"/>
-    </enumeratedValueSet>
-    <enumeratedValueSet variable="pVerify-influencer">
-      <value value="0.05"/>
-      <value value="0.2"/>
-    </enumeratedValueSet>
-    <enumeratedValueSet variable="alpha-alarmCredibility">
-      <value value="0.8"/>
-    </enumeratedValueSet>
-    <enumeratedValueSet variable="%-of-B-bot">
-      <value value="0"/>
-      <value value="1"/>
-      <value value="2"/>
-      <value value="3"/>
-      <value value="4"/>
-      <value value="5"/>
-    </enumeratedValueSet>
-  </experiment>
-</experiments>
 @#$#@#$#@
 @#$#@#$#@
 default
