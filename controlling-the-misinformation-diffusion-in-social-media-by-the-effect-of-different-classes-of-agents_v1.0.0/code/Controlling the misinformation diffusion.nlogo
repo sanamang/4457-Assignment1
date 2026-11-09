@@ -240,12 +240,15 @@ end
 to spreading  ;; S -> B or H (share now) ; S -> V (verify first)
   ; only visible believers pass the alarm on. The agents exposed this tick are fixed before anyone
   ; decides, so an agent who starts sharing this tick cannot expose others until the next tick.
+  ; Receiving the alarm is itself frightening: fear jumps by fear-contagion-rate before the agent decides.
   ; Once an agent receives the alarm, it follows the game's decision rule: share now when
   ; c + f * g > q * f * r, otherwise verify first.
   let exposed turtles with [state = "S" and any? link-neighbors with [state = "B"]]
   ask exposed [
     if random-float 1 < n-effect * time-effect * beta-spreadingRate [
       mark-reached
+      set fear min list 1 (fear + fear-contagion-rate)
+      set cost-of-verifying max list 0 (c0 + anxiety * fear - skepticism)
       let share-now? (cost-of-verifying + f * g > q * f * r)
       if not decided? [
         set decided? true
@@ -1129,7 +1132,7 @@ Each agent also carries a fear level (its current emotional state) and fixed anx
 
 Only believers pass the alarm on. When a susceptible agent receives it from a believer friend, it shares now if cost-of-verifying + f * g > q * f * r, and otherwise verifies first. Here q is the platform's fact-checking level, f the chance the alarm is false, g the payoff from sharing, and r the cost of being flagged for sharing a false alarm. A verifying agent decides after verify-delay ticks: it rejects a false alarm (V -> F) or shares a true one (V -> B).
 
-The platform checks each new post once, with probability q. A checked post is held (hidden) for check-delay ticks, then flagged (H -> F) if the alarm is false or shown (H -> B) if it is true. Forgetting (B, F -> S) works as in the original model, and believers can still realise on their own that an alarm is false (B -> F), for false alarms only. Fear spreads socially: an agent's fear rises when its friends are visibly sharing, and decays otherwise.
+The platform checks each new post once, with probability q. A checked post is held (hidden) for check-delay ticks, then flagged (H -> F) if the alarm is false or shown (H -> B) if it is true. Forgetting (B, F -> S) works as in the original model, and believers can still realise on their own that an alarm is false (B -> F), for false alarms only. Fear spreads socially: an agent's fear jumps by fear-contagion-rate when it receives the alarm (just before it decides), rises each tick with the share of its friends who are visibly sharing, and decays otherwise.
 
 The alarm-type chooser sets whether the alarm in a run is false or a true warning. Agents never observe this; they only know f. Exactly %-of-initial-believers % of agents (40 at the default 1%) start sharing at tick 0, and their posts get the platform check like any other.
 
