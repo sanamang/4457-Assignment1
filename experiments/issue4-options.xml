@@ -1,0 +1,61 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<experiments>
+  <experiment name="options" repetitions="5" sequentialRunOrder="true" runMetricsEveryStep="false" timeLimit="168">
+    <setup>setup</setup>
+    <go>go</go>
+    <metrics>
+      <metric>false-alarm-reach</metric>
+      <metric>tick-90-reached</metric>
+      <metric>simulated-p</metric>
+      <metric>mean-c-at-decision</metric>
+      <metric><![CDATA[count turtles with [decided? and c-at-decision >= f * (r - g)] / max list 1 count turtles with [decided?]]]></metric>
+    </metrics>
+    <constants>
+      <enumeratedValueSet variable="alarm-type">
+        <value value="&quot;false&quot;"></value>
+        <value value="&quot;true&quot;"></value>
+      </enumeratedValueSet>
+      <enumeratedValueSet variable="q">
+        <value value="0"></value>
+        <value value="0.3"></value>
+        <value value="0.5"></value>
+      </enumeratedValueSet>
+      <enumeratedValueSet variable="fear-contagion-rate">
+        <value value="0.1"></value>
+        <value value="0.3"></value>
+        <value value="0.5"></value>
+      </enumeratedValueSet>
+      <enumeratedValueSet variable="c0">
+        <value value="0.2"></value>
+        <value value="0.4"></value>
+      </enumeratedValueSet>
+      <enumeratedValueSet variable="skepticism-max">
+        <value value="1"></value>
+        <value value="0.5"></value>
+      </enumeratedValueSet>
+    </constants>
+  </experiment>
+  <experiment name="smoke" repetitions="3" sequentialRunOrder="true" runMetricsEveryStep="false" timeLimit="168">
+    <setup>setup</setup>
+    <go>go</go>
+    <metrics>
+      <metric>false-alarm-reach</metric>
+      <metric><![CDATA[count turtles with [reached?]]]></metric>
+      <metric>simulated-p</metric>
+      <metric>mean-c-at-decision</metric>
+      <metric>tick-50-reached</metric>
+      <metric>tick-90-reached</metric>
+    </metrics>
+    <constants>
+      <enumeratedValueSet variable="alarm-type">
+        <value value="&quot;false&quot;"></value>
+        <value value="&quot;true&quot;"></value>
+      </enumeratedValueSet>
+      <enumeratedValueSet variable="q">
+        <value value="0"></value>
+        <value value="0.5"></value>
+        <value value="1"></value>
+      </enumeratedValueSet>
+    </constants>
+  </experiment>
+</experiments>
