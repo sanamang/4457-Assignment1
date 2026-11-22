@@ -240,12 +240,15 @@ end
 to spreading  ;; S -> B or H (share now) ; S -> V (verify first)
   ; only visible believers pass the alarm on. The agents exposed this tick are fixed before anyone
   ; decides, so an agent who starts sharing this tick cannot expose others until the next tick.
+  ; Receiving the alarm is itself frightening: fear jumps by fear-contagion-rate before the agent decides.
   ; Once an agent receives the alarm, it follows the game's decision rule: share now when
   ; c + f * g > q * f * r, otherwise verify first.
   let exposed turtles with [state = "S" and any? link-neighbors with [state = "B"]]
   ask exposed [
     if random-float 1 < n-effect * time-effect * beta-spreadingRate [
       mark-reached
+      set fear min list 1 (fear + fear-contagion-rate)
+      set cost-of-verifying max list 0 (c0 + anxiety * fear - skepticism)
       let share-now? (cost-of-verifying + f * g > q * f * r)
       if not decided? [
         set decided? true
@@ -1129,7 +1132,7 @@ Each agent also carries a fear level (its current emotional state) and fixed anx
 
 Only believers pass the alarm on. When a susceptible agent receives it from a believer friend, it shares now if cost-of-verifying + f * g > q * f * r, and otherwise verifies first. Here q is the platform's fact-checking level, f the chance the alarm is false, g the payoff from sharing, and r the cost of being flagged for sharing a false alarm. A verifying agent decides after verify-delay ticks: it rejects a false alarm (V -> F) or shares a true one (V -> B).
 
-The platform checks each new post once, with probability q. A checked post is held (hidden) for check-delay ticks, then flagged (H -> F) if the alarm is false or shown (H -> B) if it is true. Forgetting (B, F -> S) works as in the original model, and believers can still realise on their own that an alarm is false (B -> F), for false alarms only. Fear spreads socially: an agent's fear rises when its friends are visibly sharing, and decays otherwise.
+The platform checks each new post once, with probability q. A checked post is held (hidden) for check-delay ticks, then flagged (H -> F) if the alarm is false or shown (H -> B) if it is true. Forgetting (B, F -> S) works as in the original model, and believers can still realise on their own that an alarm is false (B -> F), for false alarms only. Fear spreads socially: an agent's fear jumps by fear-contagion-rate when it receives the alarm (just before it decides), rises each tick with the share of its friends who are visibly sharing, and decays otherwise.
 
 The alarm-type chooser sets whether the alarm in a run is false or a true warning. Agents never observe this; they only know f. Exactly %-of-initial-believers % of agents (40 at the default 1%) start sharing at tick 0, and their posts get the platform check like any other.
 
@@ -1473,6 +1476,532 @@ NetLogo 6.3.0
 @#$#@#$#@
 @#$#@#$#@
 @#$#@#$#@
+<experiments>
+  <experiment name="main" repetitions="30" runMetricsEveryStep="false">
+    <setup>setup</setup>
+    <go>go</go>
+    <timeLimit steps="170"/>
+    <metric>false-alarm-reach</metric>
+    <metric>peak-believers</metric>
+    <metric>tick-50-reached</metric>
+    <metric>tick-90-reached</metric>
+    <metric>share-never-reached</metric>
+    <metric>simulated-p</metric>
+    <metric>mean-c-at-decision</metric>
+    <enumeratedValueSet variable="%-of-initial-believers">
+      <value value="1"/>
+    </enumeratedValueSet>
+    <enumeratedValueSet variable="%-of-B-bot">
+      <value value="0"/>
+    </enumeratedValueSet>
+    <enumeratedValueSet variable="%-of-F-bot">
+      <value value="0"/>
+    </enumeratedValueSet>
+    <enumeratedValueSet variable="scholars-community">
+      <value value="&quot;None&quot;"/>
+    </enumeratedValueSet>
+    <enumeratedValueSet variable="has-time-effect?">
+      <value value="false"/>
+    </enumeratedValueSet>
+    <enumeratedValueSet variable="night-time-effect?">
+      <value value="false"/>
+    </enumeratedValueSet>
+    <enumeratedValueSet variable="beta-spreadingRate">
+      <value value="0.5"/>
+    </enumeratedValueSet>
+    <enumeratedValueSet variable="pForget">
+      <value value="0.1"/>
+    </enumeratedValueSet>
+    <enumeratedValueSet variable="pVerify">
+      <value value="0.05"/>
+    </enumeratedValueSet>
+    <enumeratedValueSet variable="c0">
+      <value value="0.2"/>
+    </enumeratedValueSet>
+    <enumeratedValueSet variable="fear-decay-rate">
+      <value value="0.1"/>
+    </enumeratedValueSet>
+    <enumeratedValueSet variable="g">
+      <value value="0.5"/>
+    </enumeratedValueSet>
+    <enumeratedValueSet variable="verify-delay">
+      <value value="1"/>
+    </enumeratedValueSet>
+    <enumeratedValueSet variable="r">
+      <value value="2.5"/>
+    </enumeratedValueSet>
+    <enumeratedValueSet variable="check-delay">
+      <value value="2"/>
+    </enumeratedValueSet>
+    <enumeratedValueSet variable="skepticism-min">
+      <value value="0"/>
+    </enumeratedValueSet>
+    <enumeratedValueSet variable="skepticism-max">
+      <value value="1"/>
+    </enumeratedValueSet>
+    <enumeratedValueSet variable="q">
+      <value value="0"/>
+      <value value="0.1"/>
+      <value value="0.2"/>
+      <value value="0.3"/>
+      <value value="0.4"/>
+      <value value="0.5"/>
+      <value value="0.6"/>
+      <value value="0.7"/>
+      <value value="0.8"/>
+      <value value="0.9"/>
+      <value value="1"/>
+    </enumeratedValueSet>
+    <enumeratedValueSet variable="alarm-type">
+      <value value="&quot;false&quot;"/>
+      <value value="&quot;true&quot;"/>
+    </enumeratedValueSet>
+    <enumeratedValueSet variable="fear-contagion-rate">
+      <value value="0.1"/>
+      <value value="0.3"/>
+      <value value="0.5"/>
+    </enumeratedValueSet>
+    <enumeratedValueSet variable="f">
+      <value value="0.2"/>
+      <value value="0.5"/>
+      <value value="0.8"/>
+    </enumeratedValueSet>
+  </experiment>
+  <experiment name="sens_check_delay" repetitions="30" runMetricsEveryStep="false">
+    <setup>setup</setup>
+    <go>go</go>
+    <timeLimit steps="170"/>
+    <metric>false-alarm-reach</metric>
+    <metric>peak-believers</metric>
+    <metric>tick-50-reached</metric>
+    <metric>tick-90-reached</metric>
+    <metric>share-never-reached</metric>
+    <metric>simulated-p</metric>
+    <metric>mean-c-at-decision</metric>
+    <enumeratedValueSet variable="%-of-initial-believers">
+      <value value="1"/>
+    </enumeratedValueSet>
+    <enumeratedValueSet variable="%-of-B-bot">
+      <value value="0"/>
+    </enumeratedValueSet>
+    <enumeratedValueSet variable="%-of-F-bot">
+      <value value="0"/>
+    </enumeratedValueSet>
+    <enumeratedValueSet variable="scholars-community">
+      <value value="&quot;None&quot;"/>
+    </enumeratedValueSet>
+    <enumeratedValueSet variable="has-time-effect?">
+      <value value="false"/>
+    </enumeratedValueSet>
+    <enumeratedValueSet variable="night-time-effect?">
+      <value value="false"/>
+    </enumeratedValueSet>
+    <enumeratedValueSet variable="beta-spreadingRate">
+      <value value="0.5"/>
+    </enumeratedValueSet>
+    <enumeratedValueSet variable="pForget">
+      <value value="0.1"/>
+    </enumeratedValueSet>
+    <enumeratedValueSet variable="pVerify">
+      <value value="0.05"/>
+    </enumeratedValueSet>
+    <enumeratedValueSet variable="c0">
+      <value value="0.2"/>
+    </enumeratedValueSet>
+    <enumeratedValueSet variable="fear-decay-rate">
+      <value value="0.1"/>
+    </enumeratedValueSet>
+    <enumeratedValueSet variable="g">
+      <value value="0.5"/>
+    </enumeratedValueSet>
+    <enumeratedValueSet variable="verify-delay">
+      <value value="1"/>
+    </enumeratedValueSet>
+    <enumeratedValueSet variable="r">
+      <value value="2.5"/>
+    </enumeratedValueSet>
+    <enumeratedValueSet variable="check-delay">
+      <value value="1"/>
+      <value value="2"/>
+      <value value="6"/>
+    </enumeratedValueSet>
+    <enumeratedValueSet variable="skepticism-min">
+      <value value="0"/>
+    </enumeratedValueSet>
+    <enumeratedValueSet variable="skepticism-max">
+      <value value="1"/>
+    </enumeratedValueSet>
+    <enumeratedValueSet variable="q">
+      <value value="0"/>
+      <value value="0.1"/>
+      <value value="0.2"/>
+      <value value="0.3"/>
+      <value value="0.4"/>
+      <value value="0.5"/>
+      <value value="0.6"/>
+      <value value="0.7"/>
+      <value value="0.8"/>
+      <value value="0.9"/>
+      <value value="1"/>
+    </enumeratedValueSet>
+    <enumeratedValueSet variable="alarm-type">
+      <value value="&quot;false&quot;"/>
+      <value value="&quot;true&quot;"/>
+    </enumeratedValueSet>
+    <enumeratedValueSet variable="f">
+      <value value="0.5"/>
+    </enumeratedValueSet>
+    <enumeratedValueSet variable="fear-contagion-rate">
+      <value value="0.3"/>
+    </enumeratedValueSet>
+  </experiment>
+  <experiment name="sens_r" repetitions="30" runMetricsEveryStep="false">
+    <setup>setup</setup>
+    <go>go</go>
+    <timeLimit steps="170"/>
+    <metric>false-alarm-reach</metric>
+    <metric>peak-believers</metric>
+    <metric>tick-50-reached</metric>
+    <metric>tick-90-reached</metric>
+    <metric>share-never-reached</metric>
+    <metric>simulated-p</metric>
+    <metric>mean-c-at-decision</metric>
+    <enumeratedValueSet variable="%-of-initial-believers">
+      <value value="1"/>
+    </enumeratedValueSet>
+    <enumeratedValueSet variable="%-of-B-bot">
+      <value value="0"/>
+    </enumeratedValueSet>
+    <enumeratedValueSet variable="%-of-F-bot">
+      <value value="0"/>
+    </enumeratedValueSet>
+    <enumeratedValueSet variable="scholars-community">
+      <value value="&quot;None&quot;"/>
+    </enumeratedValueSet>
+    <enumeratedValueSet variable="has-time-effect?">
+      <value value="false"/>
+    </enumeratedValueSet>
+    <enumeratedValueSet variable="night-time-effect?">
+      <value value="false"/>
+    </enumeratedValueSet>
+    <enumeratedValueSet variable="beta-spreadingRate">
+      <value value="0.5"/>
+    </enumeratedValueSet>
+    <enumeratedValueSet variable="pForget">
+      <value value="0.1"/>
+    </enumeratedValueSet>
+    <enumeratedValueSet variable="pVerify">
+      <value value="0.05"/>
+    </enumeratedValueSet>
+    <enumeratedValueSet variable="c0">
+      <value value="0.2"/>
+    </enumeratedValueSet>
+    <enumeratedValueSet variable="fear-decay-rate">
+      <value value="0.1"/>
+    </enumeratedValueSet>
+    <enumeratedValueSet variable="g">
+      <value value="0.5"/>
+    </enumeratedValueSet>
+    <enumeratedValueSet variable="verify-delay">
+      <value value="1"/>
+    </enumeratedValueSet>
+    <enumeratedValueSet variable="r">
+      <value value="1.5"/>
+      <value value="2.5"/>
+      <value value="4"/>
+    </enumeratedValueSet>
+    <enumeratedValueSet variable="check-delay">
+      <value value="2"/>
+    </enumeratedValueSet>
+    <enumeratedValueSet variable="skepticism-min">
+      <value value="0"/>
+    </enumeratedValueSet>
+    <enumeratedValueSet variable="skepticism-max">
+      <value value="1"/>
+    </enumeratedValueSet>
+    <enumeratedValueSet variable="q">
+      <value value="0"/>
+      <value value="0.1"/>
+      <value value="0.2"/>
+      <value value="0.3"/>
+      <value value="0.4"/>
+      <value value="0.5"/>
+      <value value="0.6"/>
+      <value value="0.7"/>
+      <value value="0.8"/>
+      <value value="0.9"/>
+      <value value="1"/>
+    </enumeratedValueSet>
+    <enumeratedValueSet variable="alarm-type">
+      <value value="&quot;false&quot;"/>
+      <value value="&quot;true&quot;"/>
+    </enumeratedValueSet>
+    <enumeratedValueSet variable="f">
+      <value value="0.5"/>
+    </enumeratedValueSet>
+    <enumeratedValueSet variable="fear-contagion-rate">
+      <value value="0.3"/>
+    </enumeratedValueSet>
+  </experiment>
+  <experiment name="sens_skep_low" repetitions="30" runMetricsEveryStep="false">
+    <setup>setup</setup>
+    <go>go</go>
+    <timeLimit steps="170"/>
+    <metric>false-alarm-reach</metric>
+    <metric>peak-believers</metric>
+    <metric>tick-50-reached</metric>
+    <metric>tick-90-reached</metric>
+    <metric>share-never-reached</metric>
+    <metric>simulated-p</metric>
+    <metric>mean-c-at-decision</metric>
+    <enumeratedValueSet variable="%-of-initial-believers">
+      <value value="1"/>
+    </enumeratedValueSet>
+    <enumeratedValueSet variable="%-of-B-bot">
+      <value value="0"/>
+    </enumeratedValueSet>
+    <enumeratedValueSet variable="%-of-F-bot">
+      <value value="0"/>
+    </enumeratedValueSet>
+    <enumeratedValueSet variable="scholars-community">
+      <value value="&quot;None&quot;"/>
+    </enumeratedValueSet>
+    <enumeratedValueSet variable="has-time-effect?">
+      <value value="false"/>
+    </enumeratedValueSet>
+    <enumeratedValueSet variable="night-time-effect?">
+      <value value="false"/>
+    </enumeratedValueSet>
+    <enumeratedValueSet variable="beta-spreadingRate">
+      <value value="0.5"/>
+    </enumeratedValueSet>
+    <enumeratedValueSet variable="pForget">
+      <value value="0.1"/>
+    </enumeratedValueSet>
+    <enumeratedValueSet variable="pVerify">
+      <value value="0.05"/>
+    </enumeratedValueSet>
+    <enumeratedValueSet variable="c0">
+      <value value="0.2"/>
+    </enumeratedValueSet>
+    <enumeratedValueSet variable="fear-decay-rate">
+      <value value="0.1"/>
+    </enumeratedValueSet>
+    <enumeratedValueSet variable="g">
+      <value value="0.5"/>
+    </enumeratedValueSet>
+    <enumeratedValueSet variable="verify-delay">
+      <value value="1"/>
+    </enumeratedValueSet>
+    <enumeratedValueSet variable="r">
+      <value value="2.5"/>
+    </enumeratedValueSet>
+    <enumeratedValueSet variable="check-delay">
+      <value value="2"/>
+    </enumeratedValueSet>
+    <enumeratedValueSet variable="skepticism-min">
+      <value value="0"/>
+    </enumeratedValueSet>
+    <enumeratedValueSet variable="skepticism-max">
+      <value value="0.5"/>
+    </enumeratedValueSet>
+    <enumeratedValueSet variable="q">
+      <value value="0"/>
+      <value value="0.1"/>
+      <value value="0.2"/>
+      <value value="0.3"/>
+      <value value="0.4"/>
+      <value value="0.5"/>
+      <value value="0.6"/>
+      <value value="0.7"/>
+      <value value="0.8"/>
+      <value value="0.9"/>
+      <value value="1"/>
+    </enumeratedValueSet>
+    <enumeratedValueSet variable="alarm-type">
+      <value value="&quot;false&quot;"/>
+      <value value="&quot;true&quot;"/>
+    </enumeratedValueSet>
+    <enumeratedValueSet variable="f">
+      <value value="0.5"/>
+    </enumeratedValueSet>
+    <enumeratedValueSet variable="fear-contagion-rate">
+      <value value="0.3"/>
+    </enumeratedValueSet>
+  </experiment>
+  <experiment name="sens_skep_normal" repetitions="30" runMetricsEveryStep="false">
+    <setup>setup</setup>
+    <go>go</go>
+    <timeLimit steps="170"/>
+    <metric>false-alarm-reach</metric>
+    <metric>peak-believers</metric>
+    <metric>tick-50-reached</metric>
+    <metric>tick-90-reached</metric>
+    <metric>share-never-reached</metric>
+    <metric>simulated-p</metric>
+    <metric>mean-c-at-decision</metric>
+    <enumeratedValueSet variable="%-of-initial-believers">
+      <value value="1"/>
+    </enumeratedValueSet>
+    <enumeratedValueSet variable="%-of-B-bot">
+      <value value="0"/>
+    </enumeratedValueSet>
+    <enumeratedValueSet variable="%-of-F-bot">
+      <value value="0"/>
+    </enumeratedValueSet>
+    <enumeratedValueSet variable="scholars-community">
+      <value value="&quot;None&quot;"/>
+    </enumeratedValueSet>
+    <enumeratedValueSet variable="has-time-effect?">
+      <value value="false"/>
+    </enumeratedValueSet>
+    <enumeratedValueSet variable="night-time-effect?">
+      <value value="false"/>
+    </enumeratedValueSet>
+    <enumeratedValueSet variable="beta-spreadingRate">
+      <value value="0.5"/>
+    </enumeratedValueSet>
+    <enumeratedValueSet variable="pForget">
+      <value value="0.1"/>
+    </enumeratedValueSet>
+    <enumeratedValueSet variable="pVerify">
+      <value value="0.05"/>
+    </enumeratedValueSet>
+    <enumeratedValueSet variable="c0">
+      <value value="0.2"/>
+    </enumeratedValueSet>
+    <enumeratedValueSet variable="fear-decay-rate">
+      <value value="0.1"/>
+    </enumeratedValueSet>
+    <enumeratedValueSet variable="g">
+      <value value="0.5"/>
+    </enumeratedValueSet>
+    <enumeratedValueSet variable="verify-delay">
+      <value value="1"/>
+    </enumeratedValueSet>
+    <enumeratedValueSet variable="r">
+      <value value="2.5"/>
+    </enumeratedValueSet>
+    <enumeratedValueSet variable="check-delay">
+      <value value="2"/>
+    </enumeratedValueSet>
+    <enumeratedValueSet variable="skepticism-min">
+      <value value="0"/>
+    </enumeratedValueSet>
+    <enumeratedValueSet variable="skepticism-max">
+      <value value="1"/>
+    </enumeratedValueSet>
+    <enumeratedValueSet variable="q">
+      <value value="0"/>
+      <value value="0.1"/>
+      <value value="0.2"/>
+      <value value="0.3"/>
+      <value value="0.4"/>
+      <value value="0.5"/>
+      <value value="0.6"/>
+      <value value="0.7"/>
+      <value value="0.8"/>
+      <value value="0.9"/>
+      <value value="1"/>
+    </enumeratedValueSet>
+    <enumeratedValueSet variable="alarm-type">
+      <value value="&quot;false&quot;"/>
+      <value value="&quot;true&quot;"/>
+    </enumeratedValueSet>
+    <enumeratedValueSet variable="f">
+      <value value="0.5"/>
+    </enumeratedValueSet>
+    <enumeratedValueSet variable="fear-contagion-rate">
+      <value value="0.3"/>
+    </enumeratedValueSet>
+  </experiment>
+  <experiment name="sens_skep_high" repetitions="30" runMetricsEveryStep="false">
+    <setup>setup</setup>
+    <go>go</go>
+    <timeLimit steps="170"/>
+    <metric>false-alarm-reach</metric>
+    <metric>peak-believers</metric>
+    <metric>tick-50-reached</metric>
+    <metric>tick-90-reached</metric>
+    <metric>share-never-reached</metric>
+    <metric>simulated-p</metric>
+    <metric>mean-c-at-decision</metric>
+    <enumeratedValueSet variable="%-of-initial-believers">
+      <value value="1"/>
+    </enumeratedValueSet>
+    <enumeratedValueSet variable="%-of-B-bot">
+      <value value="0"/>
+    </enumeratedValueSet>
+    <enumeratedValueSet variable="%-of-F-bot">
+      <value value="0"/>
+    </enumeratedValueSet>
+    <enumeratedValueSet variable="scholars-community">
+      <value value="&quot;None&quot;"/>
+    </enumeratedValueSet>
+    <enumeratedValueSet variable="has-time-effect?">
+      <value value="false"/>
+    </enumeratedValueSet>
+    <enumeratedValueSet variable="night-time-effect?">
+      <value value="false"/>
+    </enumeratedValueSet>
+    <enumeratedValueSet variable="beta-spreadingRate">
+      <value value="0.5"/>
+    </enumeratedValueSet>
+    <enumeratedValueSet variable="pForget">
+      <value value="0.1"/>
+    </enumeratedValueSet>
+    <enumeratedValueSet variable="pVerify">
+      <value value="0.05"/>
+    </enumeratedValueSet>
+    <enumeratedValueSet variable="c0">
+      <value value="0.2"/>
+    </enumeratedValueSet>
+    <enumeratedValueSet variable="fear-decay-rate">
+      <value value="0.1"/>
+    </enumeratedValueSet>
+    <enumeratedValueSet variable="g">
+      <value value="0.5"/>
+    </enumeratedValueSet>
+    <enumeratedValueSet variable="verify-delay">
+      <value value="1"/>
+    </enumeratedValueSet>
+    <enumeratedValueSet variable="r">
+      <value value="2.5"/>
+    </enumeratedValueSet>
+    <enumeratedValueSet variable="check-delay">
+      <value value="2"/>
+    </enumeratedValueSet>
+    <enumeratedValueSet variable="skepticism-min">
+      <value value="0.5"/>
+    </enumeratedValueSet>
+    <enumeratedValueSet variable="skepticism-max">
+      <value value="1"/>
+    </enumeratedValueSet>
+    <enumeratedValueSet variable="q">
+      <value value="0"/>
+      <value value="0.1"/>
+      <value value="0.2"/>
+      <value value="0.3"/>
+      <value value="0.4"/>
+      <value value="0.5"/>
+      <value value="0.6"/>
+      <value value="0.7"/>
+      <value value="0.8"/>
+      <value value="0.9"/>
+      <value value="1"/>
+    </enumeratedValueSet>
+    <enumeratedValueSet variable="alarm-type">
+      <value value="&quot;false&quot;"/>
+      <value value="&quot;true&quot;"/>
+    </enumeratedValueSet>
+    <enumeratedValueSet variable="f">
+      <value value="0.5"/>
+    </enumeratedValueSet>
+    <enumeratedValueSet variable="fear-contagion-rate">
+      <value value="0.3"/>
+    </enumeratedValueSet>
+  </experiment>
+</experiments>
 @#$#@#$#@
 @#$#@#$#@
 default

@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<experiments>
+  <experiment name="cond2" repetitions="3" sequentialRunOrder="true" runMetricsEveryStep="false" timeLimit="168">
+    <setup>setup</setup>
+    <go>go</go>
+    <metrics>
+      <metric>mean-c-at-decision</metric>
+      <metric><![CDATA[count turtles with [decided? and c-at-decision >= f * (r - g)] / max list 1 count turtles with [decided?]]]></metric>
+      <metric><![CDATA[max [c-at-decision] of turtles]]></metric>
+    </metrics>
+    <constants>
+      <enumeratedValueSet variable="alarm-type"><value value="&quot;false&quot;"></value><value value="&quot;true&quot;"></value></enumeratedValueSet>
+      <enumeratedValueSet variable="f"><value value="0.2"></value><value value="0.5"></value><value value="0.8"></value></enumeratedValueSet>
+      <enumeratedValueSet variable="q"><value value="0"></value><value value="0.3"></value><value value="0.5"></value></enumeratedValueSet>
+      <enumeratedValueSet variable="fear-contagion-rate"><value value="0.1"></value><value value="0.3"></value><value value="0.5"></value><value value="0.8"></value></enumeratedValueSet>
+    </constants>
+  </experiment>
+</experiments>
