@@ -1,0 +1,20 @@
+2026-11-14 14:16:54 === run_all start (threads=2, netlogo=/Applications/NetLogo 7.0.4/netlogo-headless.sh)
+2026-11-14 14:16:54 start main
+JAVA_HOME undefined, using java from path. For control over exact java version, set JAVA_HOME
+2026-11-14 19:53:30 done  main in 20196s -> main.csv
+2026-11-14 19:53:30 start sens_check_delay
+JAVA_HOME undefined, using java from path. For control over exact java version, set JAVA_HOME
+2026-11-15 10:19:17 done  sens_check_delay in 51947s -> sens_check_delay.csv
+2026-11-15 10:19:17 start sens_r
+JAVA_HOME undefined, using java from path. For control over exact java version, set JAVA_HOME
+2026-11-15 10:51:54 done  sens_r in 1957s -> sens_r.csv
+2026-11-15 10:51:54 start sens_skep_low
+JAVA_HOME undefined, using java from path. For control over exact java version, set JAVA_HOME
+2026-11-15 11:02:31 done  sens_skep_low in 637s -> sens_skep_low.csv
+2026-11-15 11:02:31 start sens_skep_normal
+JAVA_HOME undefined, using java from path. For control over exact java version, set JAVA_HOME
+2026-11-15 11:12:43 done  sens_skep_normal in 612s -> sens_skep_normal.csv
+2026-11-15 11:12:43 start sens_skep_high
+JAVA_HOME undefined, using java from path. For control over exact java version, set JAVA_HOME
+2026-11-15 11:55:00 done  sens_skep_high in 2537s -> sens_skep_high.csv
+2026-11-15 11:55:00 === run_all finished (failed=0)
